@@ -1,0 +1,1204 @@
+---
+title: "Data Story: Who Didn't Vote in 2016"
+author: "Kristen Akey, kka2120"
+date: "September 23, 2020"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.width=7, fig.height=4.5, fig.align='center')
+```
+
+<br>
+
+<img src = "../figs/intro_image.png" alt = "alt text" width = "650" align = "middle"/>
+
+<br>
+
+### Who **Didn't** Vote in 2016?
+
+2016 was arguably one of the most historic elections in U.S history. The election of Donald Trump to the presidency was unexpected by many: he defied most poll projections and the expectations of many election experts.1 The outcome of elections, especially of the presidency, are enormously consequential, affecting millions of lives today and for an unknowable number of generations to come.
+
+Elections are one of the main ways Americans can express their political opinions and actively take part in the democratic process. The most recent presidential election in 2016 and the midterms in 2018 showcased the importance of turning out to vote. When individuals vote, they have their voices heard and have a chance to express themselves politically. While we often hear about the people and preferences of those who voted, what about the political opinions of people who don't  and didn't vote in 2016? Who were the people that didn't vote in 2016? Why did they not vote? Were they not registered? Did they not prefer the candidates? Or was there something else restricting them from turning out to vote? 
+
+This data story seeks to explore the characteristics and preferences of the American population who *did not* turn out to vote in 2016. I start by analyzing voter turnout rates in 2016 and past elections to understand if the size of the population that did not vote in 2016 was relatively similar to past elections. Next, I examine the demographics of those who did not vote. I compare non-voters to those who had voted in the 2016 election to see if certain characteristics are most associated with voting or not voting. Lastly, I analyze the political preferences of those that had not voted to consider the theoretical question of how would the election outcome have changed, if at all, had those who had not voted, actually voted. 
+
+
+Broadly, this data story investigates:
+
+  * what was voter turnout in 2016? how does this compare to past elections?
+  * who didn't vote in 2016? were there certain characteristics that those who did not vote share? how does this differ from the population that did vote?
+  * what were the political preferences of those who did not vote? how do they compare to those who did vote?
+
+<br>
+
+#### Data: [The American National Election Survey](https://electionstudies.org/) 
+
+*Data Overview*
+
+The American National Election Survey (ANES) is a national survey series that has been conducted since 1948. The survey asks respondents a variety of questions to understand better American public opinion and voting behavior in elections. 
+
+The 2016 ANES Time Series data is my main data of analysis. This study surveyed respondents during the weeks before the November 8, 2016 general election, and in most cases, again with the same respondents in the weeks following the election. The study featured a dual-mode design, with both traditional face-to-face interviewing and Internet questionnaires. There was a total sample size of 4,271 respondents. Respondents were identified and invited to complete the survey from a sampling of 7,800 addresses across the 50 states and District of Columbia where postal service delivers mail.
+
+
+*Notes on Survey Data*
+
+While the ANES survey methodologists try to account for various biases, there remain some things to be wary of when interpreting survey data:
+
+- response bias 
+  - are respondents' answers intentionally or accidentally biased at all?
+- non-response bias
+  - is there a meaningful difference between solicited users and nonrespondents?
+- undercoverage
+  - are all members of the population adequately represented in the sample?
+
+In my interpretation of the data, I assume the sampled population is representative of the general U.S population and that responses are not meaningful biased. While these are important things to consider in survey data, I do not question the validity of the data in my analysis.
+
+
+
+```{r}
+# list of packages I use
+pack <- c("tidyverse", "haven", "here", "rprojroot", "waffle", "ggtext", "patchwork", "ggpubr")
+
+# load packages and data
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(pack)
+
+# if not already installed, install and load packages
+for (package in pack) {
+  pacman::p_load(package, character.only = TRUE, dependence=TRUE)
+}
+
+
+# get path to root directory to read in data
+# data_directory <- "data/anes_timeseries_cdf_sav/anes_timeseries_cdf.sav"
+data_directory <- "data/anes_timeseries_2016_sav/anes_timeseries_2016.sav"
+mypath <- find_root_file(criterion = has_file(data_directory))
+anes16 <- read_sav(file = file.path(mypath, data_directory))
+anes_cum <- read_sav(file = file.path(mypath, "data/anes_timeseries_cdf_sav/anes_timeseries_cdf.sav"))
+```
+
+
+```{r}
+# convert data types
+anes16[colnames(keep(anes16, is.double))] <- lapply(anes16[colnames(keep(anes16, is.double))],as.factor)
+anes_cum[colnames(keep(anes_cum, is.double))] <- lapply(anes_cum[colnames(keep(anes_cum, is.double))],as.factor)
+
+# change missing data to NA
+missing_values <- c(seq(-1,-15, by=-1), -88, -89, -99)
+for (num in missing_values) {
+  anes16 <- na_if(anes16, num)
+}
+```
+
+****************************************************************************************
+
+
+## Part 1: Voter Turnout in 2016
+
+### What percentage of the sample population voted in 2016?
+```{r}
+# V162031 the first variable I considered but is based on actual response (flawed)
+anes16 %>%
+  count(V162032x) %>%
+  drop_na() %>%
+  mutate(total_n = sum(n),
+        percent_n = round(n / total_n,2), 
+         vote_group = ifelse(V162032x==3, 1, 2)) %>%
+  group_by(vote_group) %>%
+  mutate(vote_p = round(sum(n) / total_n,2),
+         vals = vote_p * 100) %>%
+  select(vote_group, vals) %>% distinct() %>% arrange(desc(vals)) -> turnout16
+
+turnout16$vote_group <- factor(turnout16$vote_group,
+       levels = c(1,2),
+       labels = c("Voted", "Didn't Vote"))
+```
+
+
+
+
+According to ANES, about 22% of Americans *did not* vote in 2016. 
+
+
+```{r}
+waffle(turnout16, rows=10, colors=c("#663399", "#484848")) + ggtitle("Voter Turnout in 2016") + ggthemes::theme_fivethirtyeight() +
+  theme(axis.text = element_blank()) +
+  labs(caption = "1 square is approximately one percent of the sampled population")
+```
+
+<br>
+Is that a lot? How does voter turnout in 2016 compare to previous election years?
+<br>
+```{r}
+names(anes_cum)[names(anes_cum)=="VCF0004"] <- "year"
+
+turnout_cum <- anes_cum %>%
+  group_by(year) %>%
+  count(VCF0703) %>%
+  drop_na() %>%
+  mutate(total_n = sum(n),
+         percent_tot = round(n / total_n,2),
+         new_group = ifelse(VCF0703==1 | VCF0703==2, "Didn't Vote", "Voted")) %>%
+  group_by(year,new_group) %>%
+  mutate(percent_vote = ifelse(VCF0703==1 | VCF0703==2, sum(percent_tot), percent_tot)) %>%
+  select(!new_group)
+
+anes_cum$VCF0703 <- factor(anes_cum$VCF0703,
+  levels = c(1,2,3),
+  labels = c("Not registered, and did not vote", "Registered, but did not vote", "Voted (registered)"))
+```
+
+
+
+```{r}
+ggplot(turnout_cum, aes(year, percent_vote, color=as.factor(new_group),
+                        group=as.factor(new_group))) + geom_point() + geom_line() + 
+  ggthemes::theme_fivethirtyeight() + 
+  theme(legend.position="bottom", axis.text.x = element_text(angle = 45), 
+        axis.title = element_text(),
+        legend.title = element_blank()) +
+  scale_y_continuous(labels = scales::percent) + xlab("Year") + ylab("Voter Turnout") +
+  guides(color = guide_legend(reverse = T))
+```
+
+<br>
+This plot shows all federal elections from 1952 to 2016. However, voter turnout is usually [lower in midterm elections than presidential elections](https://www.npr.org/2018/09/10/645223716/on-the-sidelines-of-democracy-exploring-why-so-many-americans-dont-vote), and this plot supports just that. Particularly from the mid-'70s to early 2000s, there is a large difference in turnout between presidential election years and midterm election years. For example, turnout for the 1992 presidential election was much higher than the midterm election in 1990.
+
+<br>
+
+Not including midterm elections, how does the 2016 election turnout compare to past presidential elections? 
+
+<br>
+
+```{r}
+## "Voter Turnout by Presidential Election Year" -- without annoations
+# turnout_cum %>%
+#   filter(year %in% seq(2016, 1952, by=-4)) %>%
+# ggplot(., aes(year, percent_vote, color=as.factor(new_group), group=as.factor(new_group))) + geom_point() + geom_line() + 
+#   ggthemes::theme_fivethirtyeight() +
+#   theme(legend.position="bottom", 
+#         axis.text.x = element_text(angle = 45),
+#         axis.title = element_text(),
+#         legend.title = element_blank()) + 
+#   scale_y_continuous(labels = scales::percent) + ylab("Voter Turnout")  + xlab("Year") + 
+#   ggtitle("Voter Turnout by Presidential Election Year")
+
+## "Voter Turnout by Presidential Election Year" -- with annoations
+mean_turnoutdf <- turnout_cum %>%
+  filter(year %in% seq(2016, 1952, by=-4)) %>%
+  group_by(new_group) %>%
+  summarise(mean_turnout = round(mean(percent_vote),2)) %>% ungroup() 
+
+turnout_cum %>%
+  filter(year %in% seq(2016, 1952, by=-4)) %>%
+  ggplot(., aes(year, percent_vote, color=as.factor(new_group), group=as.factor(new_group))) + 
+    geom_hline(yintercept=mean_turnoutdf[mean_turnoutdf$new_group==1,]$mean_turnout) +
+  geom_hline(yintercept=mean_turnoutdf[mean_turnoutdf$new_group==2,]$mean_turnout) +
+    geom_point() + geom_line() + 
+    ggthemes::theme_fivethirtyeight() +
+  theme(legend.position="bottom", 
+        axis.text.x = element_text(angle = 45),
+        axis.title = element_text(),
+        legend.title = element_blank()) + 
+  scale_y_continuous(labels = scales::percent) + ylab("Voter Turnout")  + xlab("Year") + 
+  ggtitle("Voter Turnout by Presidential Election Year") +
+  annotate("text", x=3, y=.3, label = paste0("mean of\n", mean_turnoutdf[mean_turnoutdf$new_group=="Didn't Vote",]$mean_turnout * 100, "%"), size=3) +
+  annotate("text", x=3, y=.71, label = paste0("mean of\n", mean_turnoutdf[mean_turnoutdf$new_group=="Voted",]$mean_turnout * 100, "%"), size=3) +
+  annotate("text", x=17, y=.75, label = "78%", size=3) + 
+  annotate("text", x=17, y=.25, label = "22%", size=3) +
+  guides(color = guide_legend(reverse = T))
+```
+
+
+In 2016, voter turnout was slightly better than the average of the past 17 presidential election cycles, with 22% of the population not voting compared to the mean of 25%. 
+
+****************************************************************************************
+****************************************************************************************
+
+
+
+## Part 2: Who *didn't* Vote in 2016?
+
+
+The outcome of the election as well as post-election reporting and polls largely told us about the demographic and political preferences of those who turned out to vote. But what about those who did not vote? Who are the people that did not vote in 2016 and what were their opinions on the presidential candidates?
+
+This section investigates the demographics of those who did not vote in 2016.
+
+
+****************************************************************************************
+
+
+**Voter Registration** 
+
+One requirement to vote in the U.S is that the individual must be registered to vote. Were those who did not vote registered to vote? 
+
+```{r}
+anes16 %>%
+  count(V162032x) %>% drop_na() %>%
+  filter(V162032x!=3) %>%
+  mutate(registered = case_when(V162032x==2 ~ "Registered",
+                                V162032x==1 ~ "Not Registered"),
+         tot = sum(n)) %>%
+  group_by(registered) %>%
+  mutate(group_tot=sum(n),
+         p_cent = round(group_tot / tot,2),
+         vals = p_cent * 100) %>%
+  select(registered, vals) %>% distinct() -> notevote_regist
+  
+
+notevote_regist %>%
+  arrange(desc(notevote_regist)) %>%
+ggplot(aes(fill = registered, values = vals)) +
+  expand_limits(x=c(0,0), y=c(0,0)) +
+  coord_equal() +
+  labs(fill = NULL, colour = NULL) +
+  theme_enhance_waffle() -> mywaf_novote_reg
+
+mywaf_novote_reg +
+  geom_waffle(
+    aes(fill= registered),
+    n_rows = 10, make_proportional = F,
+    height = 0.9, width = 0.9
+  ) +
+    scale_fill_manual(
+    values = c("#C18C5D","#7CAE7A")
+  ) +
+  ggthemes::theme_fivethirtyeight()  +
+  theme(axis.text = element_blank(), axis.line = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+  guides(color = FALSE, fill = guide_legend(reverse = T)) + ggtitle("Of non-voters in 2016:") +
+  labs(subtitle = '"Are you registered to vote...or not\n currently registered?"',
+        caption = "1 square is approximately one percent")
+  
+```
+
+
+Approximately 57% of those who did not vote in 2016 *were* registered to vote. This means that over half of those that did not vote were already registered through their state government and were indeed eligible to vote, but did not. 
+
+43% of non-voters were not registered to vote. The process to register to vote varies, depending on the state; in some states, residents can register the day of an election, while
+in others, it can take up to several weeks. 
+
+While ANES does not ask directly if respondents did not vote because they were not registered, this information is important for future Get Out The Vote canvassers. There remains a notable population that is unregistered to vote (~9% of all those surveyed in 2016). Registration is the first step to casting any ballot, so reaching this population to see if they would be interested in registering to vote is a necessary step to increasing future voter turnout.
+
+
+********************************************************************************
+
+**Political Efficacy** 
+
+For those that did not vote, what is their sense of political efficacy? Political efficacy, or external efficacy, in political science literature is defined as the feeling of having a voice in politics, as someone who believes politicians respond to the wants of constitutions.2
+
+How do those that did not vote feel about voting? Do they feel like their voice is being heard when they cast their ballot? Did they not vote because they felt like their vote wouldn't matter? While ANES did not ask this question directly in 2016, they did include questions asking respondents about how strongly they feel that voting is a duty and how strongly they feel voting is a choice.
+
+Responses to these two questions tell us about how participants view the act of voting. To view voting as a duty suggests that the individual might see voting as a responsibility to one's country/community; that voting is something he or she must do in order to ensure the continuation of an active and engaged democracy. 
+
+In contrast, to view voting as a choice might imply that the individual sees voting not as a necessary task everyone needs to participate in, but rather, as something that only those willing or wanting to take part in the political process should do.
+
+While the two options are not mutually exclusive, that is, a respondent can believe strongly that voting is both a duty and a choice, these questions give us the opportunity to begin to consider questions of political efficacy.
+
+
+```{r}
+anes16 %>%
+  filter(!is.na(V162032x), !is.na(V161151a)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+  group_by(vote_group) %>%
+  count(V161151a) %>%
+  mutate(p_cent = n / sum(n)) -> choice_df
+
+ggdotchart(choice_df, x = "V161151a", y = "p_cent",
+           color = "vote_group",                                
+           add = "segments",                            
+           add.params = list(color = "lightgray", size = 3), 
+           group = "vote_group",
+           dot.size = 4,                                 
+           ggtheme = ggthemes::theme_fivethirtyeight()
+           ) + coord_flip() +
+    labs(subtitle = '<span style = "font-size:12pt">"How strongly do you feel that voting is a **<span style = "color:black;">duty</span>**?"</span>') + 
+  scale_color_manual(values = c("#484848","#663399")) +
+ theme(legend.title = element_blank()) +
+  guides(color = FALSE) +
+  theme(
+    axis.text.x = element_text(angle = 0),
+    plot.title = element_text(size=13.8),
+    plot.subtitle = element_textbox_simple(
+    size = 13,
+    lineheight = 1,
+    margin = margin(0, 0, 5.5, 0)
+    )) + 
+  scale_y_continuous(labels = scales::percent, limits = c(0,.75)) + 
+  scale_x_discrete(labels = c(
+   "A Little\n Strongly", "Moderately\nStrongly","Very\n Strongly")) +
+  ggtitle("Voter and Non-Voters in 2016:")
+
+
+anes16 %>%
+  filter(!is.na(V162032x), !is.na(V161151b)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+  group_by(vote_group) %>%
+  count(V161151b) %>%
+  mutate(p_cent = n / sum(n)) -> duty_df
+
+ggdotchart(duty_df, x = "V161151b", y = "p_cent",
+           color = "vote_group",                                
+           add = "segments",                            
+           add.params = list(color = "lightgray", size = 3), 
+           group = "vote_group",
+           dot.size = 4,                                 
+           ggtheme = ggthemes::theme_fivethirtyeight()
+           ) + coord_flip() +
+    labs(subtitle = '<span style = "font-size:12pt">
+         "How strongly do you feel that voting is a **<span style = "color:black;">choice</span>**?"</span>') +   
+    theme(
+      axis.text.x = element_text(angle = 0),
+      plot.subtitle = element_textbox_simple(
+      size = 13,
+      lineheight = 1,
+      margin = margin(0, 0, 5.5, 0)
+    )) + 
+  scale_y_continuous(labels = scales::percent, limits = c(0,.75)) +
+  scale_color_manual(values = c("#484848","#663399")) +
+  theme(legend.title = element_blank()) +
+  guides(color = guide_legend(reverse = TRUE)) + 
+  scale_x_discrete(labels = c(
+   "A Little\n Strongly", "Moderately\nStrongly","Very\n Strongly")) 
+```
+
+
+Among non-voters in 2016, approximately 50% feel "very strongly" that voting is a duty. An even larger percentage of voters, 70%, indicated this same response. This is represented by the grey and purple dots on the first line of the top plot. In contrast, a larger proportion of non-voters compared to voters responded they felt "moderately strongly" or "a little strongly" that voting is a duty.
+
+
+With regard to the question of how strongly the respondent feels that voting is a choice, non-voters indicated they felt "very strongly" about this at a slightly higher rate than voters. Similarly for the other two categories, "moderately strongly" and "a little strongly", there were only slight differences between the response rate of voters and non-voters. Non-voters responded to "moderately strongly" at approximately the same rate they responded with that answer for the question on voting as a duty.
+
+
+So while voters are much more likely to view voting as duty compared to non-voters, non-voters indicated at a slightly greater rate that they saw voting as a choice. The contrast in voting as a duty/choice, at least among voters, suggests there is more to uncover with regard to questions of political efficacy. While no direct conclusions can be drawn due to the wording of the survey question, these findings showcase the relevancy of political efficacy when considering how different groups understand the act of voting, and could be a potential source to understanding the motivation of some to vote or not vote.
+
+
+******************************************************************
+
+**Political Engagement**
+
+Voting in the presidential election is just one form of political engagement. Are those that didn't vote in 2016 generally disengaged from politics? What proportion voted earlier in the election cycle, in a presidential primary or caucus? I examine whether non-voters voted earlier in the 2016 election and their general interest in following politics and governmental news.
+
+
+```{r}
+anes16 %>%
+  filter(!is.na(V162032x)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted in General", "Didn't Vote in General")) %>%
+  group_by(vote_group) %>%
+  count(V161021) %>% drop_na() %>%
+  mutate(p_cent = round(n / sum(n),2)) %>%
+ggplot(., aes(vote_group, p_cent, fill=V161021, group=vote_group)) + 
+  geom_bar(width=.8,position = "stack", stat="identity") +
+  ggthemes::theme_fivethirtyeight() + scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(labels = c("Yes", "No"),values = c("#7CAE7A","#C18C5D")) +
+  guides(fill = F) +
+  labs(subtitle = '<span style = "font-size:13pt">
+  "Did you vote in a Presidential primary election or caucus this year?"\n 
+  **<span style = "color:#7CAE7A;">Yes</span>** or **<span style = "color:#C18C5D";">No**?</span>') +   
+  theme(
+    plot.subtitle = element_textbox_simple(
+    size = 13,
+    lineheight = 1,
+    margin = margin(0, 0, 5.5, 0)
+    )) + 
+  scale_x_discrete(limits=c("Voted in General","Didn't Vote in General"))
+  
+
+```
+
+
+The majority of non-voters did not participate in a presidential primary or caucus. But, over 50% of voters did.
+
+<br>
+
+How does paying attention to what's going on in government and politics correspond with voter turnout?
+
+
+```{r}
+anes16 %>%
+  filter(!is.na(V162032x)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted in General", "Didn't Vote in General")) %>%
+  group_by(vote_group) %>%
+  count(V161003) %>%   mutate(p_cent = round(n / sum(n),2)) %>%
+  select(!c(n))  -> df
+
+
+df$V161003 <- factor(df$V161003, labels = c("Always", "Most of the time", "About half the time", "Some of the time", "Never"), levels = c(1:5))
+
+anes16 %>%
+  mutate(vote_group = case_when(V162032x==3 ~ "Voted", V162032x==c(1,2) ~ "Didn't Vote")) %>%
+  group_by(vote_group) %>%
+  count(V161003) %>%  drop_na() %>% mutate(p_cent = round(n / sum(n),2)) %>%
+  ggplot(., aes(x = V161003, y = p_cent, fill=as.factor(vote_group))) +
+  geom_bar(col="black", stat="identity", position = position_dodge2(reverse=TRUE, padding=0)) + 
+  scale_fill_manual(values=c("#484848","#663399")) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(legend.title = element_blank()) + guides(fill = guide_legend(reverse = T)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(subtitle = '"How often do you pay attention to what’s going on in government and politics?"') +
+  scale_x_discrete(labels = c("Always", "Most of\nthe time", "About half\nthe time",
+                              "Some of\nthe time", "Never"))
+
+```
+
+
+The majority of non-voters pay attention to what is happening in politics "some of the time," while most voters say they pay attention "most of the time." 
+
+
+The plot showcases the divergence in attention paid to politics by the two voter groups. Non-voters respond that they pay attention to politics "some of the time" or "never" at a much higher rate than voters. In comparison, the reverse is true for the responses of "always" and "most of the time," with voters indicating these responses at a higher rate than non-voters. This supports that non-voters, compared to voters, generally pay attention to politics less.
+
+
+
+****************************************************************************************
+
+**Race**
+
+How did voter turnout vary by race? The U.S has a long history of suppressing the votes of people of color. What is the relation between voter turnout and race in 2016?
+
+```{r}
+anes16$V161310x <- factor(anes16$V161310x,
+       levels = c(1:6),
+       labels = c("White", "Black", "Asian", "Native\nAmerican", "Hispanic", "Other"))
+
+anes16 %>%
+  mutate(vote_status = case_when(V162032x==c(1,2) ~ "Didn't Vote",
+                                  V162032x==3 ~ "Voted")) %>%
+  group_by(vote_status) %>%
+  count(V161310x) %>% drop_na() %>%
+  mutate(p_cent = round(n / sum(n),2)) %>%
+  ggplot(., aes(fct_reorder(V161310x, p_cent), p_cent, 
+                group=as.factor(vote_status), fill=as.factor(vote_status))) + 
+    geom_bar(stat="identity", position="dodge", col="black") + coord_flip() +
+    scale_fill_manual(values=c("#484848","#663399")) + ggthemes::theme_fivethirtyeight() +
+    scale_y_continuous(limits=c(0,.80), labels = scales::percent) +
+    guides(fill = guide_legend(reverse = T)) + theme(legend.title= element_blank()) +
+  labs(title = "2016 Voter Turnout by Race")
+```
+
+
+Notably, there is a larger proportion of non-voters compared to voters in all racial groups, besides white. White people made up the largest proportion of voters. These results suggest that among communities of color, not voting was more prevalent than voting in 2016. These findings should cause concern, as the disparity in voter turnout among racial groups supports that the reason for not voting is not arbitrary, but is also due to systematic inequalities and barriers in the U.S.3
+
+
+****************************************************************************************
+
+**Education**
+
+
+How did voter turnout vary by educational levels?
+
+
+```{r}
+anes16 %>%
+  mutate(edu = case_when(V161270==c(1:8) ~ "High school\nor Less",
+                         V161270==9 ~ "High school\ngraduate",
+                         V161270==10 ~ "Some college,\nno degree",
+                         V161270==c(11:12) ~ "Associate\ndegree",
+                         V161270==13 ~ "Bachelor's\ndegree",
+                         V161270==14 ~ "Master's\ndegree",
+                         V161270==15 ~ "Professional\nschool degree",
+                         V161270==16 ~"Doctorate\ndegree"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")
+        ) %>%
+                group_by(vote_group) %>%
+    count(edu) %>% drop_na() %>%
+    mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+  ggplot(., aes(x = fct_relevel(edu,c("High school\nor Less", "High school\ngraduate", 
+                                 "Some college,\nno degree",
+                                 "Associate\ndegree", "Bachelor's\ndegree", "Master's\ndegree", 
+                                 "Professional\nschool degree", "Doctorate\ndegree")), y=p_cent,
+                fill = vote_group)) + 
+           geom_bar(stat="identity", position = "dodge", col="black") +
+  scale_fill_manual(values=c("#484848","#663399")) + guides(fill = guide_legend(reverse = T)) +
+    ggthemes::theme_fivethirtyeight() +
+  theme(legend.title = element_blank(),
+        axis.text=element_text(size=7),
+        axis.text.x = element_text(angle = 45)) + facet_wrap(~vote_group) +
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Education by Voter Group, 2016")
+```
+
+
+The majority of non-voters in 2016 were high school graduates, comprising 35% of non-voters. The second most common educational attainment among non-voters was "some college no degree," at approximately 28%. In comparison, the largest proportion of voters held a bachelor's degree, 30%. 
+
+Voters made up a larger proportion of higher educational degrees (bachelor's, master's, professional, and doctorate degrees) compared to non-voters. While non-voters comprised a larger percentage of lower educational attainment (high school or less, high school graduate, some college no degree, and associate degree) relative to voters. Non-voters, compared to voters, tended to be less educated. 
+
+
+************************************************************************************************
+
+How does employment correspond to voter turnout? 
+
+**Employment**
+
+```{r}
+anes16 %>%
+  filter(!is.na(V161277), !is.na(V162032x)) %>%
+  mutate(employment = case_when(V161277==1 ~ "Working",
+                                V161277==c(2,4) ~ "Unemployed",
+                                V161277==5 ~ "Retired",
+                                V161277==6 ~ "Permanently\nDisabled",
+                                V161277==7 ~ "Homemaker",
+                                V161277==8 ~ "Student"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")
+        ) %>% 
+        group_by(vote_group) %>%
+  count(employment) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>%
+  ggplot(., aes(fct_reorder(employment, desc(p_cent)), p_cent,
+                fill = vote_group)) + 
+             geom_bar(stat="identity", position="dodge", col="black") +
+  scale_fill_manual(values=c("#484848","#663399")) + guides(fill = guide_legend(reverse = T)) +
+    ggthemes::theme_fivethirtyeight() +
+  theme(legend.title = element_blank(),
+        axis.text=element_text(size=7),
+        axis.text.x = element_text(angle = 45)) +
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) + facet_grid(~vote_group) +
+  ggtitle("Employment by Voter Group, 2016")
+```
+
+
+The proportion of both non-voters and voters who work is relatively the same, at about 62%. However, a larger percentage of voters are retired, compared to non-voters. This supports the theory that older, retired folks vote more because they have the time and resources to do so. Additionally, non-voters make-up a larger percentage of those who are homemakers, permanently disabled, unemployed, or students relative to voters. Respondents of these four employment groups may be more susceptible to not voting for a variety of reasons. Homemakers are busy at home, most likely caring for one or many other loved ones, and may not be able to take the time to go and vote. Similarly, for those who are unemployed, their time may be spent searching and applying for a new job to support their family rather than voting. Voting centers may not have the proper accessibility for those who are permanently disabled, or members of this group may not have the ability or resources to transport themselves to the voting polls alone. Finally, students may be more likely to not vote due to many students moving to new states and the difficulty of registering elsewhere may seem cumbersome, their absentee ballot may not get to them on time, or the whirlwind of the semester leads them to forget.  
+
+The differences in employment between voters and non-voters, while not large, still suggest it may be easier for some to vote than others based on their education.
+
+********************************************************************************************************
+
+Finally, how was age associated with voter turnout? 
+
+**Age**
+
+```{r}
+anes16 %>%
+  filter(!is.na(V161267)) %>%
+ggplot(., aes(as.numeric(V161267))) + geom_histogram(stat="count") + 
+  ggthemes::theme_fivethirtyeight() + theme(axis.title = element_text()) +
+  ggtitle("Distribution of All Respondents' Age") + xlab("Age of Respondent") + ylab("Count")
+```
+
+This plot shows the age distribtuion of all respondents, as a point of relativity.
+
+<br>
+
+```{r}
+group_age_median <- anes16 %>%
+  filter(!is.na(V161267), !is.na(V162032x)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+  select(V161267, vote_group) %>% drop_na() %>%
+  group_by(vote_group) %>%
+  summarise(age_median = median(as.numeric(V161267)))
+
+anes16 %>%
+  filter(!is.na(V161267), !is.na(V162032x)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+  filter(vote_group=="Voted") %>%
+ggplot(., aes(as.numeric(V161267), fill = vote_group, group=vote_group)) + 
+  geom_histogram(stat="count", col="black") +
+  ggthemes::theme_fivethirtyeight() + theme(axis.title = element_text()) + guides(fill = F) +
+  geom_vline(xintercept = group_age_median[group_age_median$vote_group=="Voted",]$age_median, col="red", size = 2) +
+  scale_fill_manual(values = c("#663399")) + xlab("Age of Respondent") + ylab("Count") +
+  ggtitle("2016 Voters: Age Distribution") 
+
+anes16 %>%
+  filter(!is.na(V161267), !is.na(V162032x)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+  filter(vote_group=="Didn't Vote") %>%
+ggplot(., aes(as.numeric(V161267), fill = vote_group)) + geom_histogram(stat="count", 
+                                                                        col="black") +
+  ggthemes::theme_fivethirtyeight() + guides(fill = F) +
+  theme(axis.title = element_text()) +
+  geom_vline(xintercept = group_age_median[group_age_median$vote_group=="Didn't Vote",]$age_median, col="red", size = 2) +
+  scale_fill_manual(values = c("#484848")) + xlab("Age of Respondent") + ylab("Count") +
+  ggtitle("2016 Non-Voters: Age Distribution") 
+```
+
+<br>
+
+```{r}
+anes16 %>%
+  filter(!is.na(V161267), !is.na(V162032x)) %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+ggplot(., aes(as.numeric(V161267), fill = vote_group)) + #geom_histogram(stat="count", col="black") +
+  geom_vline(xintercept = group_age_median$age_median, col="black", size = 1) +
+  geom_density(alpha = 0.3, adjust = 1, colour = NA) + xlab("Age of Respondent") +
+  ylab("Density") +
+  ggthemes::theme_fivethirtyeight() +
+  theme(axis.title = element_text(), legend.title = element_blank()) + 
+  guides(fill = guide_legend(reverse = T)) +
+  ggtitle("Age Distribution by Voter Group, 2016") +
+  scale_fill_manual(values = c("#484848", "#663399")) +
+  annotate("text", x=group_age_median$age_median[1]-4.2, y=.02, label = paste0("median age\nof non-voters: ", group_age_median$age_median[1]), size=2) +
+  annotate("text", x=group_age_median$age_median[2]+4, y=.015, label = paste0("median age\nof voters: ", group_age_median$age_median[2]), size=2) 
+```
+
+
+The two histograms and overlaid density plot show that voters tend to be older than non-voters. The median age of non-voters is 23, while the median age of voters was 38. The histogram of non-voters' ages is also left-skewed towards a relatively younger age group compared to voters.
+
+
+****************************************************************************************
+****************************************************************************************
+
+
+## Part 3: Preferences of Non-Voters in 2016
+
+
+Elections are determined by the voters who go to the polls and cast their ballot. They have an opportunity to express their political opinions and select who should be the next official in office. Those who do not vote--whether that be due to voter suppression, work/life/religious obligations, or a personal choice--miss the opportunity to take part in the electoral process. But these people still have thoughts on the election and political opinions. What are their political opinions?
+
+
+This final section explores the political preferences of those who did not vote in 2016. 
+
+<br>
+
+**Partisanship**
+
+What was the political party that non-voters most associated with?
+
+
+```{r}
+anes16 %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote")) %>%
+  count(V161158x,vote_group) %>% drop_na() %>%
+  group_by(vote_group) %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>%
+ggplot(., aes(V161158x, p_cent, fill = vote_group)) + 
+             geom_bar(stat="identity", position="dodge", col="black") +
+  scale_fill_manual(values=c("#484848","#663399")) + guides(fill = guide_legend(reverse = T)) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(legend.title = element_blank(),
+        axis.text=element_text(size=7),
+        axis.text.x = element_text(angle = 45)) +
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) + facet_grid(~vote_group) +
+  ggtitle("Employment by Voter Group, 2016") +
+  scale_x_discrete(labels = c("Strong\nDemocrat", "Not very strong\nDemocrat", "Independent-\nDemocrat", "Independent",
+                              "Independent-\nRepublican", "Not very strong\nRepublican", "Strong\nRepublican"))
+```
+
+
+Most non-voters identified as Independent, at almost 30%. In comparison, voters were most likely to identify as either Strong Democrat or Strong Republican.
+
+<br>
+
+#### Political Preferences of those who *did not* vote in 2016
+
+
+Of the 22% that did not vote, what proportion preferred one of the presidential candidates? 
+
+<br>
+
+```{r}
+turnout16 %>%
+  mutate(cols = ifelse(vote_group=="Voted", "Voted", "Didn't Vote")) %>%
+  ggplot(aes(fill = vote_group, values = vals)) +
+  expand_limits(x=c(0,0), y=c(0,0)) +
+  coord_equal() +
+  labs(fill = NULL, colour = NULL) +
+  theme_enhance_waffle() -> mywaf
+
+p1 <- mywaf +
+  geom_waffle(
+    aes(colour = vote_group, fill= cols),
+    n_rows = 10, size=.6, make_proportional = F,
+    height = 0.9, width = 0.9
+  ) +
+    scale_fill_manual(
+    values = c("#484848","#663399")
+  ) +
+  scale_colour_manual(
+    values = c("white", "black")
+  ) + ggthemes::theme_fivethirtyeight()  +
+  theme(axis.text = element_blank(), axis.line = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+  guides(color = FALSE, fill = guide_legend(reverse = T)) + ggtitle("Voter Turnout in 2016")
+```
+
+
+
+```{r}
+anes16 %>%
+  count(V162037) %>% drop_na() %>%
+  mutate(p_count = round(n / sum(n),2),
+         new_vals = p_count * 100) %>%
+  select(V162037,new_vals) -> novote_prefer
+
+novote_prefer %>%
+  mutate(cols = ifelse(V162037==1, "Yes", "No")) %>%
+  ggplot(aes(fill = V162037, values = new_vals)) +
+  expand_limits(x=c(0,0), y=c(0,0)) +
+  coord_equal() +
+  labs(fill = NULL, colour = NULL) +
+  theme_enhance_waffle() -> mywaf_novote
+
+p2 <- mywaf_novote +
+  geom_waffle(
+    aes(fill= cols),
+    n_rows = 10, make_proportional = F,
+    height = 0.9, width = 0.9
+  ) +
+    scale_fill_manual(
+    values = c("#C18C5D","#7CAE7A")
+  ) +
+  ggthemes::theme_fivethirtyeight()  +
+  theme(axis.text = element_blank(), axis.line = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+  guides(color = FALSE, fill = guide_legend(reverse = T)) + ggtitle("Of non-voters in 2016:") +
+  labs(subtitle = '"Did you prefer one of the candidates \nfor President?"')
+```
+
+
+```{r}
+p1 + p2
+```
+
+
+
+
+66% of those that didn'tvote *did* have a presidential candidate that they preferred! 
+
+<br>
+
+Who would they have potentially voted for?
+
+
+```{r}
+anes16 %>%
+  # combine 'other' categories
+  mutate(V162037a=replace(V162037a, V162037a%in%c(3:9), 5)) %>%
+  count(V162037a) %>% drop_na() %>%
+  mutate(p_cent = round(n / sum(n),3),
+         label = p_cent * 100) %>%
+  ggplot(., aes(V162037a, p_cent, fill = V162037a)) + geom_bar(stat="identity", col="black") + 
+  scale_y_continuous(limits=c(0,.60), labels = scales::percent) +
+  geom_text(aes(label=paste0(label, "%")),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  theme(axis.title = element_text()) + guides(fill = FALSE) +
+  ggthemes::theme_fivethirtyeight() + 
+  scale_x_discrete(labels = c("1" = "Clinton","2" = "Trump","5" = "Other")) +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  ggtitle("Of non-voters in 2016:") + 
+  labs(subtitle = '"Who did you prefer [for presidential\n candidate]?"') -> nonvote_pref
+
+
+
+anes16 %>%
+  select(V162038, V162037a) %>%
+  mutate(condition = case_when(
+                        # Strong
+                        V162038 == 1  ~ "strong",
+                        # Weak
+                        V162038 == 2  ~ "weak",
+                        )) %>% 
+    mutate(cand = case_when(
+                        V162037a == 2  ~ "trump",
+                        V162037a == 1 ~ "clinton",
+                        V162037a == 5 ~ "zother",
+                        )) %>% 
+  drop_na() %>%
+  count(cand, condition) %>%
+  mutate(total = 482) %>% 
+  group_by(cand) %>%
+  mutate(p_cent = round(n / total,2),
+         label = p_cent * 100,
+         uni_condition = paste0(condition, cand)) %>%
+ggplot(., aes(fill=uni_condition, y=p_cent, x=cand)) +
+    geom_bar(position="stack", stat="identity", col="black") +
+  xlab("") +
+  theme(axis.title = element_text()) + guides(fill = FALSE) +
+  ggthemes::theme_fivethirtyeight() +
+  scale_x_discrete(labels = c("clinton" = "Clinton","trump" = "Trump","zother" = "Other")) +
+  scale_fill_manual(values = c("#153251", "#87211C", "#ECCB46", "#5D97D5", "#DC5C56", "#F3E090")) +
+  scale_y_continuous(limits=c(0,.60), labels = scales::percent) +
+  # ggtitle("Non-voters in 2016") +
+  labs(subtitle = '<span style = "font-size:12pt">\
+  "Would you say your preference for this candidate was **<span style = "color:#87211C;">strong</span>** or **<span style = "color:#DC5C56";">not strong</span>**?</span>') +   
+  theme(
+    # plot.subtitle.position = "plot",
+    plot.subtitle = element_textbox_simple(
+      size = 13,
+      lineheight = 1,
+      margin = margin(0, 0, 5.5, 0)
+    )) -> nonvote_pref_strong
+```
+
+
+```{r}
+nonvote_pref + nonvote_pref_strong
+```
+
+
+
+Among those that did not vote, preference was largely equally split between Clinton and Trump.
+
+But were these preferences strong? Did people not vote because they didn't strongly prefer their candidate of choice?
+
+Preference for one's candidate was mostly strong among non-voters, as indicated by the darker shades in each of the three bars in the right plot. Particularly among those who preferred a third-party candidate, nearly all had a strong preference for that candidate!
+
+<br>
+
+How though do the preferences of non-voters compare to those who did vote? Were they largely reflective, or similar, to those of the rest of the population that voted?
+
+
+```{r}
+anes16 %>%
+  # those who did vote
+  filter(V162032x ==3) %>%
+  # 1=Clinton, 2=Trump, 3=Other
+  mutate(V162034a = case_when( V162034a==1 ~ 1,
+                    V162034a==2 ~ 2,
+                    V162034a%in%c(3:5) ~ 3),
+         V162034a = as.factor(V162034a)) %>%
+  count(V162034a) %>% drop_na() %>%
+    mutate(p_cent = round(n / sum(n),3),
+         label = p_cent * 100)  %>%
+ggplot(., aes(V162034a, p_cent, fill = as.factor(V162034a))) + 
+  geom_bar(stat="identity", col="black") + 
+  scale_y_continuous(limits=c(0,.80), labels = scales::percent) +
+  geom_text(aes(label=paste0(label, "%")),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  theme(axis.title = element_text()) + guides(fill = FALSE) +
+  ggthemes::theme_fivethirtyeight() + 
+  scale_x_discrete(labels = c("Clinton","Trump","Other")) +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  ggtitle("Voters in 2016") + 
+  labs(subtitle = '"Who did you prefer [for presidential\n candidate]?"') -> vote_pref
+  
+anes16 %>%
+  select(V162035, V162032x, V162034a) %>%
+  # those who did vote
+  filter(V162032x ==3) %>%
+  mutate(condition = case_when(
+                        # Strong
+                        V162035 == 1  ~ "strong",
+                        # Weak
+                        V162035 == 2  ~ "weak",
+                        )) %>% 
+    mutate(cand = case_when(
+                        V162034a == 2  ~ "trump",
+                        V162034a == 1 ~ "clinton",
+                        V162034a == c(3:5)  ~ "zother",
+                        )) %>% 
+  drop_na() %>%
+  count(cand, condition) %>%
+  mutate(total = 2653) %>% 
+  group_by(cand) %>%
+  mutate(p_cent = round(n / total,2),
+         label = p_cent * 100,
+         uni_condition = paste0(condition, cand)) %>%
+  ggplot(., aes(fill=uni_condition, y=p_cent, x=cand)) +
+    geom_bar(position="stack", stat="identity", col="black") +
+    xlab("") +
+  theme(axis.title = element_text()) + guides(fill = FALSE) +
+  ggthemes::theme_fivethirtyeight() +
+  scale_x_discrete(labels = c("clinton" = "Clinton","trump" = "Trump","zother" = "Other")) +
+  scale_fill_manual(values = c("#153251", "#87211C", "#ECCB46", "#5D97D5", "#DC5C56", "#F3E090")) +
+  scale_y_continuous(limits=c(0,.80), labels = scales::percent) +
+  # ggtitle("Voters in 2016") +
+  labs(subtitle = '<span style = "font-size:12pt">
+  "Would you say your preference for this candidate was **<span style = "color:#87211C;">strong</span>** or **<span style = "color:#DC5C56";">not strong</span>**?</span>') +   
+  theme(
+    # plot.subtitle.position = "plot",
+    plot.subtitle = element_textbox_simple(
+      size = 13,
+      lineheight = 1,
+      margin = margin(0, 0, 5.5, 0)
+    )) -> vote_pref_strong
+```
+
+
+```{r}
+vote_pref + vote_pref_strong
+```
+
+
+Similar to the [popular vote outcome of the 2016 election](https://www.nytimes.com/elections/2016/results/president), about 49% of voters preferred Clinton and 44% preferred Trump. Also, most voters indicated they preferred Clinton or Trump strongly. In contrast to non-voters, most voters who preferred a third-party candidate did not do so strongly, as shown by the mostly light yellow final bar in the right plot.
+
+
+
+<br>
+
+********************************************************************************************************
+
+Lastly, I examine how the preferences of non-voters intersect with race, education, and employment.
+
+
+```{r}
+anes16 %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+         V162037a = case_when( V162037a==1 ~ 1,
+                               V162037a==2 ~ 2,
+                               V162037a%in%c(3:5) ~ 3),
+         V162037a = as.factor(V162037a)
+  ) %>%
+  group_by(vote_group) %>%
+  count(V161310x, V162037a) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+ggplot(., aes(x = V161310x, y=p_cent,
+              fill = V162037a)) + 
+  geom_bar(stat="identity", position = "dodge", col="black") +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  guides(fill = F) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(
+    legend.title = element_blank(),
+  ) + 
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Non-Voters: Race and Presidential Choice, 2016") 
+
+
+anes16 %>%
+  mutate(vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+         V162034a = case_when( V162034a==1 ~ 1,
+                               V162034a==2 ~ 2,
+                               V162034a%in%c(3:5) ~ 3),
+         V162034a = as.factor(V162034a)
+  ) %>%
+  group_by(vote_group) %>%
+  count(V161310x, V162034a) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+ggplot(., aes(x = V161310x, y=p_cent,
+              fill = V162034a)) + 
+  geom_bar(stat="identity", position = "dodge", col="black") +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  guides(fill = F) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(
+    legend.title = element_blank(),
+    ) + 
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Voters: Race and Presidential Choice, 2016") 
+```
+
+
+The plot above shows that the trend for presidential preference by race is similar for both voters and non-voters. White voters and non-voters mostly preferred Trump. Black, Asian, and Hispanic voters and non-voters preferred Clinton. 
+
+Among white non-voters, there is a slightly larger difference in preference for Trump compared to Clinton  (around 15 percentage points), relative to white voters (~10 percentage points). Among Hispanic non-voters, preference for Clinton is relatively stronger compared to Hispanic voters, an approximately 5 percentage point difference.
+
+<br>
+
+```{r}
+# non-voters
+anes16 %>%
+  mutate(edu = case_when(V161270==c(1:8) ~ "High school\nor Less",
+                         V161270==9 ~ "High school\ngraduate",
+                         V161270==10 ~ "Some college,\nno degree",
+                         V161270==c(11:12) ~ "Associate\ndegree",
+                         V161270==13 ~ "Bachelor's\ndegree",
+                         V161270==14 ~ "Master's\ndegree",
+                         V161270==15 ~ "Professional\nschool degree",
+                         V161270==16 ~"Doctorate\ndegree"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+        V162037a = case_when( V162037a==1 ~ 1,
+                    V162037a==2 ~ 2,
+                    V162037a%in%c(3:5) ~ 3),
+         V162037a = as.factor(V162037a)
+        ) %>%
+                group_by(vote_group) %>%
+  count(edu, V162037a) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+ggplot(., aes(x = fct_relevel(edu,c("High school\nor Less", "High school\ngraduate", 
+                                 "Some college,\nno degree",
+                                 "Associate\ndegree", "Bachelor's\ndegree", "Master's\ndegree", 
+                                 "Professional\nschool degree", "Doctorate\ndegree")), y=p_cent,
+            fill = V162037a)) + 
+           geom_bar(stat="identity", position = "dodge", col="black") +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  guides(fill = F) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(
+    legend.title = element_blank(),
+    axis.text=element_text(size=7),
+    axis.text.x = element_text(angle = 45)) + 
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Non-Voters: Education and Presidential Choice, 2016")
+
+
+# voters
+anes16 %>%
+  mutate(edu = case_when(V161270==c(1:8) ~ "High school\nor Less",
+                         V161270==9 ~ "High school\ngraduate",
+                         V161270==10 ~ "Some college,\nno degree",
+                         V161270==c(11:12) ~ "Associate\ndegree",
+                         V161270==13 ~ "Bachelor's\ndegree",
+                         V161270==14 ~ "Master's\ndegree",
+                         V161270==15 ~ "Professional\nschool degree",
+                         V161270==16 ~"Doctorate\ndegree"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+        V162034a = case_when( V162034a==1 ~ 1,
+                    V162034a==2 ~ 2,
+                    V162034a%in%c(3:5) ~ 3),
+         V162034a = as.factor(V162034a)
+        ) %>%
+  group_by(vote_group) %>%
+  count(edu, V162034a) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+ggplot(., aes(x = fct_relevel(edu,c("High school\nor Less", "High school\ngraduate", 
+                                 "Some college,\nno degree",
+                                 "Associate\ndegree", "Bachelor's\ndegree", "Master's\ndegree", 
+                                 "Professional\nschool degree", "Doctorate\ndegree")), y=p_cent,
+                fill = V162034a)) + 
+           geom_bar(stat="identity", position = "dodge", col="black") +
+   scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  guides(fill = F) +
+    ggthemes::theme_fivethirtyeight() +
+  theme(
+    legend.title = element_blank(),
+        axis.text=element_text(size=7),
+        axis.text.x = element_text(angle = 45)) + 
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Voters: Education and Presidential Choice, 2016")
+```
+
+
+Similar to the previous plots, there exist alike trends of presidential preference among educational levels, even when voter turnout is considered.
+
+Respondents that are high school graduates, some college no degree, or have an associated degree overall prefer Trump to Clinton, among both voters and non-voters. Similarly, those with a bachelor's degree or more prefer Clinton over Trump, among both voters and non-voters. The one exception to this case is those with a professional school degree: those of this educational level who didn't vote preferred Trump at a greater rate than Clinton, while those who did vote preferred Clinton had a higher rate than Trump.
+
+
+<br>
+
+```{r}
+# non-voters
+anes16 %>%
+  mutate(edu = case_when(V161270==c(1:8) ~ "High school\nor Less",
+                         V161270==9 ~ "High school\ngraduate",
+                         V161270==10 ~ "Some college,\nno degree",
+                         V161270==c(11:12) ~ "Associate\ndegree",
+                         V161270==13 ~ "Bachelor's\ndegree",
+                         V161270==14 ~ "Master's\ndegree",
+                         V161270==15 ~ "Professional\nschool degree",
+                         V161270==16 ~"Doctorate\ndegree"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+      employment = case_when(V161277==1 ~ "Working",
+                                V161277==c(2,4) ~ "Unemployed",
+                                V161277==5 ~ "Retired",
+                                V161277==6 ~ "Permanently\nDisabled",
+                                V161277==7 ~ "Homemaker",
+                                V161277==8 ~ "Student"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+        V162037a = case_when( V162037a==1 ~ 1,
+                    V162037a==2 ~ 2,
+                    V162037a%in%c(3:5) ~ 3),
+         V162037a = as.factor(V162037a)
+        ) %>%
+                group_by(vote_group) %>%
+  count(employment, V162037a) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+ggplot(., aes(fct_relevel(employment,c("Working", "Retired", 
+                  "Homemaker","Permanently\nDisabled", 
+                  "Student", "Unemployed")), y=p_cent, fill = V162037a)) + 
+  geom_bar(stat="identity", position = "dodge", col="black") +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  guides(fill = F) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(
+    legend.title = element_blank(),
+    plot.title = element_text(size=16),
+    axis.text=element_text(size=7),
+    axis.text.x = element_text(angle = 45)) + 
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Non-Voters: Employment and Presidential Choice, 2016")
+
+
+# voters
+anes16 %>%
+  mutate(edu = case_when(V161270==c(1:8) ~ "High school\nor Less",
+                         V161270==9 ~ "High school\ngraduate",
+                         V161270==10 ~ "Some college,\nno degree",
+                         V161270==c(11:12) ~ "Associate\ndegree",
+                         V161270==13 ~ "Bachelor's\ndegree",
+                         V161270==14 ~ "Master's\ndegree",
+                         V161270==15 ~ "Professional\nschool degree",
+                         V161270==16 ~"Doctorate\ndegree"),
+               employment = case_when(V161277==1 ~ "Working",
+                                V161277==c(2,4) ~ "Unemployed",
+                                V161277==5 ~ "Retired",
+                                V161277==6 ~ "Permanently\nDisabled",
+                                V161277==7 ~ "Homemaker",
+                                V161277==8 ~ "Student"),
+        vote_group = ifelse(V162032x==3, "Voted", "Didn't Vote"),
+        V162034a = case_when( V162034a==1 ~ 1,
+                    V162034a==2 ~ 2,
+                    V162034a%in%c(3:5) ~ 3),
+         V162034a = as.factor(V162034a)
+        ) %>%
+  group_by(vote_group) %>%
+  count(employment, V162034a) %>% drop_na() %>%
+  mutate(tot = sum(n), p_cent = round(n / tot,2)) %>% 
+ggplot(., aes(fct_relevel(employment,c("Working", "Retired", 
+                  "Homemaker","Permanently\nDisabled", 
+                  "Student", "Unemployed")), y=p_cent,fill = V162034a)) + 
+  geom_bar(stat="identity", position = "dodge", col="black") +
+  scale_fill_manual(values = c("#204B7A", "#D0322B", "#F3DE8A")) +
+  guides(fill = F) +
+  ggthemes::theme_fivethirtyeight() +
+  theme(
+    legend.title = element_blank(),
+    plot.title = element_text(size=16),
+    axis.text=element_text(size=7),
+    axis.text.x = element_text(angle = 45)) + 
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill = FALSE) +
+  ggtitle("Voters: Employment and Presidential Choice, 2016")
+```
+
+
+Finally, the above trends in presidential preference shown among both voters and non-voters with regard to race and education also applies to employment. The same trend of candidate preference exists for members of the same employment group, regardless of voter turnout. Among both voters and non-voters, the majority of those who are working prefer Clinton to Trump, while those who are retired preferred Trump at a greater rate than Clinton. Interestingly, homemakers who voted preferred Trump more than Clinton, relative to non-voting homemakers. One theory for this may be that homemakers who voted want to preserve traditional ideals that are usually associated with the Republican party. Students and the unemployed preferred Trump and Clinton equally among both voters and non-voters. 
+
+*******************************************************************
+*******************************************************************
+
+## Conclusion
+
+As the 2016 election showcased, voting is important. Elections and their outcomes—who is elected into office—affect major policy decisions that can drastically change lives. And while voting is important, not everyone votes, and this was true in the last presidential election as well.
+
+This data story has overviewed the demographics and political preferences of those who did not vote in 2016. 
+
+In summary:
+
+- 22% of those surveyed did not vote (compared to the average non-vote rate of 25% in presidential elections).
+- the majority of non-voters were registered to vote.
+- most non-voters did not vote in the 2016 primary.
+- non-voters are more disengaged in politics, indicating they only pay attention to what's going on in government "some of the time" or "never" at a higher rate than voters.
+- among communities of color, it was more prevalent to have not voted than voted in 2016.
+- the majority of non-voters were high school graduates or had some college but no degree, while a larger proportion of voters had more education, a bachelor's degree or above.
+- homemakers, permanently disabled, unemployed, and students comprised a larger proportion of the non-voting population. Voting was more prevalent among those who are retired.
+- non-voters tended to be younger than voters, with a median age of 23 compared to 38.
+- non-voters identified mostly as Independent.
+- non-voters overall preferred Clinton and Trump relatively equally.
+- when examining preference for presidential candidates by race, education, and employment, similar trends in preference existed among both non-voters and voters.
+
+
+
+While there were some demographic differences between voters and non-voters (race, educational levels, and employment), there were only slight differences between the political preferences of these groups when split by their voter turnout. Those who didn't vote held a relatively similar political preference to those of their same demographic who did vote. For example, among white individuals, regardless if they voted or not, they preferred Trump at a greater rate than Clinton. This trend in preference held when considering both education and employment as well.
+
+
+There is much more to explore with regard to the differences between voters and non-voters. For example, this data story did not analyze all demographic characteristics and also did not examine multiple identity intersections simultaneously (i.e race *and* education with regard to political preference and voter turnout). But even without this further analysis, this data story has highlighted some of the main differences (and similarities) between these two groups. Non-voters, while not sharing 100% of the same demographics as voters, still hold similar political preferences; this remains when presidential preference is broken down by race, education, and employment. 
+
+In all, this further supports the importance of voting. If more people of a particular group vote, the more likely they are to have their voices heard and represented. To have your voice and your communities' voices heard, vote! Let's learn from 2016 and encourage everyone, particularly those of groups who tended not to vote in 2016, to vote in 2020. 
+
+<img src = "../figs/vote.jpg" alt = "alt text" width = "650" align = "middle"/>
+
+
+***********************************************************************************************
+
+#### Sources
+
+1. Wayne Lee, "Election Experts Puzzled Over Surprise Trump Victory," *Voa News*, November 9, 2016,[https://www.voanews.com/usa/us-politics/election-experts-puzzled-over-surprise-trump-victory](https://www.voanews.com/usa/us-politics/election-experts-puzzled-over-surprise-trump-victory). 
+
+2. Jennifer Wolak, “Feelings of Political Efficacy in the Fifty States,” *Political Behavior*, 2017.
+
+3. Danyelle Solomon, "Systematic Inequality and American Democracy, *Center for American Progress*, August 7, 2019, [https://www.americanprogress.org/issues/race/reports/2019/08/07/473003/systematic-inequality-american-democracy/](https://www.americanprogress.org/issues/race/reports/2019/08/07/473003/systematic-inequality-american-democracy/).
+
+
